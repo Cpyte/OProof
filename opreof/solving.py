@@ -27,7 +27,7 @@ residual, and the exhaustive solution set still pins the variable down.
 from dataclasses import dataclass, field
 from itertools import product
 
-from kernel import (
+from .core import (
     Const,
     Expr,
     KernelError,
@@ -445,7 +445,7 @@ def synthesize(kernel, e1, e2, inputs=None, *, hole: str = "?") -> SolveResult:
         res.witness = res.satisfying[0] if res.satisfying else None
         if feasible and res.satisfying:
             res.status = "always"
-            from api import Literal
+            from .api import Literal
             res.synthesized = Literal(res.satisfying[0]["?"], hole_ty)
         elif feasible:
             res.status = "never"
@@ -476,7 +476,7 @@ def synthesize(kernel, e1, e2, inputs=None, *, hole: str = "?") -> SolveResult:
 
 def _synth_candidate(kernel, requirement, others, ty):
     """Search a bounded term vocabulary for an exact match of ``requirement``."""
-    from opreof import term_of_expr  # local import avoids a cycle
+    from . import term_of_expr  # local import avoids a cycle
 
     base = [Var(n, ty) for n in others] + [Lit(0, ty), Lit(1, ty)]
     if ty.signed:
@@ -512,7 +512,7 @@ def _synth_candidate(kernel, requirement, others, ty):
         if ok:
             folded = kernel.normalize(rip)
             if isinstance(folded, Lit):
-                from api import Literal
+                from .api import Literal
                 return Literal(folded.value, ty)
             return term_of_expr(folded)
     return None

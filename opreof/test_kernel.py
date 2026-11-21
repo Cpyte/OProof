@@ -1,6 +1,6 @@
 """Runnable tests for the OProof kernel, axiom store, generalization and bridge.
 
-Run with:  python3 test_kernel.py
+Run with:  python3 -m opreof.test_kernel  (or the `opreof-check` script)
 Everything is a plain assertion; the harness prints PASS/FAIL per test and
 exits 1 on the first failure.
 """
@@ -10,10 +10,10 @@ import os
 import sys
 import tempfile
 
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import opreof
-from kernel import (
+from opreof.core import (
     BOOL,
     Assign,
     Block,
@@ -278,7 +278,7 @@ def t_axiom_lifecycle():
 @test("axiom registry: duplicate rule returns False, no raise")
 
 def t_axiom_registry_dupe():
-    from axiom_store import AxiomRegistry
+    from opreof.axiom_store import AxiomRegistry
 
     reg = AxiomRegistry()
     rule = Op("add", (Var("a", int8), Var("b", int8)))
@@ -609,8 +609,8 @@ def t_division_semantics():
 @test("bridge: Term(int32)/uint16 resolve; expr roundtrip; end-to-end proof")
 
 def t_bridge_terms():
-    import kernel as K
-    from api import Term
+    import opreof.core as K
+    from opreof.api import Term
 
     assert opreof.resolve_term_type(Term(int32)) is K.int32
     assert opreof.resolve_term_type(Term(uint16)) is K.uint16
@@ -652,7 +652,7 @@ def t_bridge_blocks():
     assert r, r
 
 def _parse_parms(s):
-    from api import parse_parms
+    from opreof.api import parse_parms
 
     return parse_parms(s)
 
@@ -789,6 +789,25 @@ def t_fold_canonical():
     e = ripen(Op("mul", (Lit(-85, int8), Lit(9, int8))), int8, env={})
     assert eval_c(k.normalize(e)) == eval_c(e)
 
+@test("kernel: remainder-by-one is zero, not the dividend")
+
+def t_rem_one():
+    k = opreof.kernel
+    x = Var("x", int8)
+    # Regression: builtin_rewrite used to return `a` for every divisor-1 op,
+    # shadowing the rem-specific rule.  That made rems(x,1) -> x and let
+    # prove_expr claim that false equality was proven.  cpyte's `%` has C
+    # sign-of-dividend semantics, so `x % 1` must fold to 0 for every x.
+    assert k.normalize(Op("rems", (x, Lit(1, int8)), int8)) == Lit(0, int8)
+    assert k.normalize(Op("rems", (x, Lit(-1, int8)), int8)) == Lit(0, int8)
+    assert k.normalize(Op("remu", (Var("u", uint8), Lit(1, uint8)), uint8)) == Lit(0, uint8)
+    good = k.prove_expr(Op("rems", (x, Lit(1, int8)), int8), Lit(0, int8),
+                        {"x": int8}, generalize=False)
+    assert good.status == "proven", good
+    bad = k.prove_expr(Op("rems", (x, Lit(1, int8)), int8), x,
+                       {"x": int8}, generalize=False)
+    assert bad.status == "not_proven", bad
+
 # E-graphs -- saturate the store, then extract; and axiom curation
 
 @test("egraph: laws the rewriter must refuse are proved by saturation")
@@ -846,7 +865,7 @@ def t_egraph_expansion():
         path = os.path.join(tmp, "law.py")
         with open(path, "w") as fh:
             fh.write(
-                "from axiom_store import axiom\n"
+                "from opreof import axiom\n"
                 "from opreof import Op, Var, int8\n"
                 "BIG = Op('add', (Op('add', (Op('neg', (Var('a', int8),)),"
                 " Var('b', int8)),), Var('a', int8)),)\n"
@@ -878,7 +897,7 @@ def t_egraph_cycles():
         path = os.path.join(tmp, "cycle.py")
         with open(path, "w") as fh:
             fh.write(
-                "from axiom_store import axiom\n"
+                "from opreof import axiom\n"
                 "from opreof import Op, Var, int8\n"
                 "X = Op('sub', (Var('a', int8), Var('b', int8)))\n"
                 "Y = Op('add', (Var('a', int8), Op('neg', (Var('b', int8),))))\n"
@@ -950,7 +969,7 @@ def t_egraph_soundness():
         path = os.path.join(tmp, "bad.py")
         with open(path, "w") as fh:
             fh.write(
-                "from axiom_store import axiom\n"
+                "from opreof import axiom\n"
                 "from opreof import Op, Var, int8\n"
                 "AXIOMS = [axiom('bogus_sub',"
                 " Op('sub', (Var('a', int8), Var('b', int8))),"

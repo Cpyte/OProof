@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 if TYPE_CHECKING:  # axiom_store imports the kernel, so this is one-way
-    from axiom_store import Axiom
+    from .axiom_store import Axiom
 
 # Canonical value invariant (nailed down BEFORE any rewrite rule)
 #
@@ -792,10 +792,16 @@ def builtin_rewrite(e: Expr) -> Expr | None:
                 raise UndefinedError("division by literal zero")
             return Lit(_fold(op, a.value, b.value, ty), ty)
         if isinstance(b, Lit):
+            # Remainder by +/-1 is always zero.  This MUST be checked before
+            # the generic divisor-1 rule below: `a / 1 == a` but `a % 1 == 0`.
+            # The old ordering made the rem rule unreachable, so `rems(x, 1)`
+            # normalized to `x` (and prove_expr even "proved" that falsehood).
+            if op == "rems" and b.value in (1, -1):
+                return Lit(0, ty or a.type)
+            if op == "remu" and b.value == 1:
+                return Lit(0, ty or a.type)
             if b.value == 1:
                 return a
-            if op in {"remu", "rems"} and b.value == 1:
-                return Lit(0, ty)
         return None
 
     if op in _CMP_OPS:
@@ -1103,7 +1109,7 @@ class Kernel:
     """
 
     def __init__(self, axioms_dir: str | None = None) -> None:
-        from axiom_store import AxiomRegistry
+        from .axiom_store import AxiomRegistry
 
         self.axioms = AxiomRegistry()
         self.axioms_dir = axioms_dir
@@ -1482,7 +1488,7 @@ class Kernel:
         self, result: Proof, pairs: list[tuple[Expr, Expr]], inputs: dict[str, Type]
     ) -> Proof:
         try:
-            from generalization import generalize_equality
+            from .generalization import generalize_equality
 
             derived: list = []
             for e1, e2 in pairs:
@@ -1516,7 +1522,7 @@ class Kernel:
     ) -> Expr:
         """Extract a size-minimal representative of ``e`` from a saturated
         e-graph built over the (curated) axiom store."""
-        from egraphs import EGraphRunner
+        from .egraphs import EGraphRunner
 
         inputs = dict(inputs) if inputs is not None else {}
         env = {n: (Var(n, ty), ty) for n, ty in inputs.items()}
@@ -1549,7 +1555,7 @@ class Kernel:
         and the proof is downgraded to ``not_proven`` (pass ``verify=False`` to
         take the store's word for it).
         """
-        from egraphs import EGraphRunner, verify_rules
+        from .egraphs import EGraphRunner, verify_rules
 
         inputs = dict(inputs) if inputs is not None else None
         try:
@@ -1640,7 +1646,7 @@ class Kernel:
 
     def load_theory(self, name: str) -> list[Axiom | Any]:
         """Load one axiom file by name (``"arithmetic"`` -> ``arithmetic.py``)."""
-        from axiom_store import AxiomError
+        from .axiom_store import AxiomError
 
         if not self.axioms_dir:
             raise AxiomError("kernel has no axioms_dir to load theories from")

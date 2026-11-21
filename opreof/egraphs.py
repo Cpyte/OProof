@@ -46,8 +46,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from axiom_store import Axiom
-from kernel import (
+from .axiom_store import Axiom
+from .core import (
     Const,
     Expr,
     KernelError,
@@ -81,7 +81,7 @@ _SINGLE_TYPES = {
     "int64": None,
     "uint64": None,
 }
-from kernel import BOOL, int8, int16, int32, int64, uint8, uint16, uint32, uint64
+from .core import BOOL, int8, int16, int32, int64, uint8, uint16, uint32, uint64
 
 _SINGLE_TYPES.update(
     {
@@ -126,9 +126,12 @@ class EGraph:
         self.nodes: list[tuple] = []
         #: structural key -> node id (hash-cons)
         self._mem: dict[tuple, int] = {}
-        #: rule name -> concrete placeholder types of its last firing, so the
-        #: caller can re-check that rule on exactly the types it was used at
-        self.match_types: dict[str, dict] = {}
+        #: node head (``(kind,)`` or ``('o', op)``) -> node ids, so a pattern
+        #: rooted at ``mul`` is only tried at ``mul`` nodes, not at all of them
+        self._by_head: dict[tuple, list[int]] = {}
+        #: rule name -> every distinct set of concrete placeholder types it
+        #: fired at, so the caller can re-check the rule on each of them
+        self.match_types: dict[str, list[dict]] = {}
         #: depth cutoff for *derived* nodes (0 = follow the input terms).
         #: Rules are applied in both directions, so a contracting law such as
         #: ``neg(neg(x)) == x`` also *expands*; composed with a two-variable
@@ -209,6 +212,7 @@ class EGraph:
         self._class_of.append(cls)
         self._members.setdefault(cls, set()).add(nid)
         self._mem[key] = nid
+        self._by_head.setdefault(_head(key), []).append(nid)
         return nid
 
     def add(self, e: Expr) -> int:
@@ -299,8 +303,13 @@ class EGraph:
             self.find(self._class_of[v]) for v in pinned.values()
         )
         out: list[dict] = []
+        want = _pattern_head(pat)
+        roots = (
+            range(len(self.nodes)) if want is None
+            else tuple(self._by_head.get(want, ()))
+        )
         try:
-            for nid in range(len(self.nodes)):
+            for nid in roots:
                 self._match_at(
                     pat, nid, {**pinned, _ROOT: nid}, out, path
                 )
@@ -368,9 +377,12 @@ class EGraph:
         cur = [bind]
         here = path | {self.find(self._class_of[nid])}
         for pa, acls in zip(pats, node[2]):
+            want = _pattern_head(pa)
             nxt: list[dict] = []
             for cb in cur:
                 for a_nid in self.class_members(acls):
+                    if want is not None and _head(self.nodes[a_nid]) != want:
+                        continue
                     self._match_at(pa, a_nid, cb, nxt, here)
             cur = nxt
             if not cur:
@@ -411,7 +423,9 @@ class EGraph:
         matched_cls = self.find(self._class_of[bind[_ROOT]])
         if not self._union(other_cls, matched_cls):
             return False
-        self.match_types.setdefault(rule.name, types)
+        seen_types = self.match_types.setdefault(rule.name, [])
+        if types not in seen_types:
+            seen_types.append(types)
         return True
 
     def apply_rule(self, rule: Axiom, budget: int = 1 << 20) -> bool:
@@ -618,6 +632,19 @@ class EGraph:
 def _ty(t: Type | None) -> str | None:
     return t.name if t is not None else None
 
+def _head(node: tuple) -> tuple:
+    return (_OP, node[1]) if node[0] == _OP else (node[0],)
+
+def _pattern_head(pat: Expr) -> tuple | None:
+    """The node head a pattern can match at; ``None`` = any (a placeholder)."""
+    if isinstance(pat, Select):
+        return (_OP, "select")
+    if isinstance(pat, Op):
+        return (_OP, pat.op)
+    if isinstance(pat, Lit):
+        return (_LIT,)
+    return None
+
 # Local axiom verification -- the e-graph's soundness contract
 #
 # An e-graph proves ``a == b`` by *chaining* axiom applications plus congruence.
@@ -732,7 +759,7 @@ def rule_holds(rule: Axiom, types: dict | None = None,
     caller can distinguish "the rule is bit-exact" from "the rule survived a
     sample".
     """
-    from kernel import KernelError, eval_c
+    from .core import KernelError, eval_c
 
     names = sorted(free_vars(rule.lhs) | free_vars(rule.rhs))
     if not names:
@@ -751,6 +778,11 @@ def rule_holds(rule: Axiom, types: dict | None = None,
     if tier in _TIER_VALUES:
         # the tier's value cube *is* the decision procedure
         values = _TIER_VALUES[tier]
+        if tier == "bitwise":
+            # every bit of a placeholder must take both values at once:
+            # ``{0, 1}`` only exercises bit 0, so a literal mask such as
+            # ``and(x, 1) == x`` would pass while being false at x = 2
+            values = (0, -1 if root_ty.signed else (1 << root_ty.width) - 1)
         complete = True
     else:
         width = root_ty.width
@@ -797,6 +829,8 @@ def verify_rules(rules, types_by_rule: dict | None = None,
                  cap: int = VERIFY_CAP) -> tuple[bool, bool, list[str]]:
     """Check every rule a merge depended on.
 
+    ``types_by_rule`` maps a rule name to the placeholder typing it fired at,
+    or to a list of every typing it fired at; each one is checked.
     Returns ``(all_hold, all_complete, unsound)``: ``all_hold`` False means a
     rule is *wrong* (the store is unsound and the proof must be refused),
     ``all_complete`` False means the check was only a sample.
@@ -805,12 +839,17 @@ def verify_rules(rules, types_by_rule: dict | None = None,
     complete = True
     unsound: list[str] = []
     for r in rules:
-        ok, done = rule_holds(r, (types_by_rule or {}).get(r.name), cap)
-        if not ok:
-            hold = False
-            unsound.append(r.name)
-        if not done:
-            complete = False
+        typings = (types_by_rule or {}).get(r.name)
+        if not isinstance(typings, list):
+            typings = [typings]
+        for types in typings or [None]:
+            ok, done = rule_holds(r, types, cap)
+            if not done:
+                complete = False
+            if not ok:
+                hold = False
+                unsound.append(r.name)
+                break
     return hold, complete, unsound
 
 def _root_type(node: tuple) -> Type | None:

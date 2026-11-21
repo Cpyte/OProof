@@ -18,7 +18,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from api import Call, Term
+from opreof.api import Call, Term
 from opreof import (
     Assign,
     Block,
@@ -40,7 +40,7 @@ from opreof import (
 # 1. The api sample
 
 def api_sample():
-    from api import parse_parms
+    from opreof.api import parse_parms
 
     print("== api layer and bridge ==")
     # A Term can denote a kernel machine type.  Term(int32) resolves to the

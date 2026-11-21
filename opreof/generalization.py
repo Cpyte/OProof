@@ -21,8 +21,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
-from axiom_store import TRUE_COND, Axiom, AxiomError
-from kernel import (
+from .axiom_store import TRUE_COND, Axiom, AxiomError
+from .core import (
     Const,
     Expr,
     Kernel,

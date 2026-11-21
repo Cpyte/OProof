@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "opreof"
-version = "0.1.0"
+version = "0.1.1"
 description = "Bit-exact machine-integer equivalence proving by rewriting, equality saturation, and exhaustive solving"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -43,30 +43,11 @@ Repository = "https://github.com/Cpyte/OProof"
 Source = "https://gitea.5gnew.io.vn/Cpyte-Project/Oproof"
 
 [project.scripts]
-opreof-check = "test_kernel:main"
-
-[tool.hatch.build.targets.wheel.force-include]
-"api.py" = "api.py"
-"kernel.py" = "kernel.py"
-"axiom_store.py" = "axiom_store.py"
-"egraphs.py" = "egraphs.py"
-"generalization.py" = "generalization.py"
-"opreof.py" = "opreof.py"
-"solving.py" = "solving.py"
-"test_kernel.py" = "test_kernel.py"
-"axioms" = "axioms"
+opreof-check = "opreof.test_kernel:main"
 
 [tool.hatch.build.targets.sdist]
 include = [
-    "/api.py",
-    "/kernel.py",
-    "/axiom_store.py",
-    "/egraphs.py",
-    "/generalization.py",
-    "/opreof.py",
-    "/solving.py",
-    "/test_kernel.py",
-    "/axioms",
+    "/opreof",
     "/examples",
     "/README.md",
     "/LICENSE",

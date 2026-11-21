@@ -23,7 +23,7 @@ from collections.abc import Callable, Iterator, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from kernel import (
+from .core import (
     Const,
     Expr,
     Lit,
@@ -234,9 +234,6 @@ class AxiomRegistry:
     def load_file(self, path: str | Path) -> list[Axiom]:
         """Import one axiom file and register every ``AXIOMS`` it exports."""
         path = Path(path)
-        root = str(path.parent.parent)
-        if root not in sys.path:
-            sys.path.insert(0, root)
         modname = f"opreof_axiom_{abs(hash(str(path))) & 0xFFFFFFFF:x}"
         spec = importlib.util.spec_from_file_location(modname, path)
         module = importlib.util.module_from_spec(spec)

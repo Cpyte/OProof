@@ -31,17 +31,17 @@ from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
 
-from api import (
+from .api import (
     Call,
     Literal,
     Term,
     _parse_parms,
     parse_parms,
 )
-from api import (
+from .api import (
     Type as APIType,
 )
-from axiom_store import (
+from .axiom_store import (
     TRUE_COND,
     Axiom,
     AxiomError,
@@ -52,8 +52,8 @@ from axiom_store import (
     cond_lit_range,
     cond_type,
 )
-from egraphs import EGraph, EGraphRunner
-from kernel import (
+from .egraphs import EGraph, EGraphRunner
+from .core import (
     BOOL,
     Assign,
     Block,
@@ -88,19 +88,19 @@ from kernel import (
     uint32,
     uint64,
 )
-from solving import (
+from .solving import (
     SolveResult,
 )
-from solving import (
+from .solving import (
     find_counterexample as _find_counterexample,
 )
-from solving import (
+from .solving import (
     find_witness as _find_witness,
 )
-from solving import (
+from .solving import (
     solve_expr as _solve_expr,
 )
-from solving import (
+from .solving import (
     synthesize as _synthesize,
 )
 

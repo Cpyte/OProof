@@ -113,10 +113,10 @@ never a wrong one.
 ## Run the tests
 
 ```sh
-python test_kernel.py
+python -m opreof.test_kernel   # or: opreof-check
 ```
 
-41 tests, including an exhaustive bit-exact sweep of every axiom over
+42 tests, including an exhaustive bit-exact sweep of every axiom over
 concrete inputs for the small types.
 
 ## Examples
